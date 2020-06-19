@@ -39,6 +39,14 @@
  ;; TODO - a basic extenor with some good properties -- eg. prop:custom-write
  )
 
+(module+ for-private
+  (provide
+   extenor-extenorc-table
+   extenorc-field-spec-list*
+   opaque-flag
+   single-field-extenorc?
+   ))
+
 (require
  racket/list
  (for-syntax
@@ -353,6 +361,8 @@
 (define (list-length-one? l)
   (and (not (null? l))
        (null? (cdr l))))
+(define (single-field-extenorc? ec)
+  (list-length-one? (extenorc-field-spec-list* ec)))
 
 (define opaque-flag (gensym))
 
@@ -378,6 +388,9 @@
   (check-equal? (point-y my-point) 2)
   (check-equal? (get-extenor-field my-point 'z) 5)
   (check-exn exn? (λ () (get-extenor-field my-point 'relevant?)))
+  (check-equal? (get-extenor-field my-point 'not-there 'fallback) 'fallback)
+  (check-equal? (get-extenor-field my-point 'not-there (λ () 'fallback-2))
+                'fallback-2)
   (check-equal? (point-relevant? my-point) #t)
   (check-equal? (length (my-point)) 3)
   )
