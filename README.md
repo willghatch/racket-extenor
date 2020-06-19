@@ -1,0 +1,1 @@
+This is a library for a kind of Racket record object that can be dynamically extended (including with struct-type-properties), keep its extensions when being updated with standard functions (unlike normal Racket structs), and can be introspected to some degree.
