@@ -11,14 +11,14 @@
   [get-extenor-field (->* (extenor? isym?) (any/c) any/c)]
   [set-extenor-field (-> extenor? isym? any/c any/c)]
   [get-extenor-keys (-> extenor? (listof isym?))]
-  [get-extenor-struct-type-properties (-> extenor? (listof structure-type-property?))]
+  [get-extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
   [remove-extenorc (-> extenor? extenorc? extenor?)]
   ; TODO - merge-extenors
 
   [make-extenorc (->* ()
                       (#:name (or/c not isym?)
                        #:guard (or/c not procedure?)
-                       #:properties (hash/c structure-type-property? any/c))
+                       #:properties (hash/c struct-type-property? any/c))
                       #:rest (listof (cons/c (or/c 'hidden 'visible)
                                              isym?))
                       (list/c extenorc?
@@ -28,12 +28,20 @@
   [extenorc? (-> any/c any/c)]
   [extenorc-name (-> extenorc? any/c)]
   [get-extenorc-struct-type-properties
-   (-> extenorc? (listof structure-type-property?))]
-  [make-prop-extenorc (-> structure-type-property? extenorc?)]
+   (-> extenorc? (listof struct-type-property?))]
+  [make-prop-extenorc (-> struct-type-property? any/c extenorc?)]
   )
  define-extenorc
  ;; TODO - a basic extenor with some good properties -- eg. prop:custom-write
  )
+
+(require
+ racket/list
+ (for-syntax
+  racket/base
+  syntax/parse
+  racket/syntax
+  ))
 
 ;; An extenor has:
 ;; * The struct-type constructor for its type (for quickly setting fields without
@@ -45,7 +53,7 @@
 ;; the extended extenor must use a new subtype of the base extenor struct that includes
 ;; the property.  If the extenorc does not add a new property, then the current struct
 ;; constructor can be re-used.
-(struct extenor (struct-type-constructor extenorc-table))
+(struct extenor (struct-constructor extenorc-table))
 
 ;; extenorcs have:
 ;; * A name, which is an interned symbol or #f. (TODO - this may change)
@@ -63,12 +71,12 @@
 
 (define (build-extenor-constructor prop-alist)
   (define-values (type constructor predicate accessor mutator)
-    (make-struct-type (gensym) struct:etxnor 0 0 0 prop-alist))
+    (make-struct-type (gensym) struct:extenor 0 0 0 prop-alist))
   constructor)
 
 (define (add-extenorc an-extenor an-extenorc . field-vals)
   ;; Check whether the extenorc is already there.
-  (when (hash-contains-key? (extenor-extenorc-table an-extenor) an-extenorc)
+  (when (hash-has-key? (extenor-extenorc-table an-extenor) an-extenorc)
     (error 'add-extenorc "the extenor already contains the extenorc: ~v" an-extenorc))
   ;; Check whether any visible fields of the extenorc conflict with existing
   ;; visible fields in the extenor.
@@ -86,7 +94,7 @@
            field-conflict))
   ;; Check whether any properties of the extenorc conflict with existing properties
   ;; on the extenor.
-  (define new-props-alist (extenorc-prop-alist an-extenorc))
+  (define new-props-alist (extenorc-property-alist an-extenorc))
   (define old-props-alist
     (and (not (null? new-props-alist))
          (for/fold ([props '()])
@@ -97,8 +105,8 @@
                        (extenorc-property-alist extenorc))
                    props))))
   (define prop-conflict
-    (for/or ([prop (map car (extenorc-prop-alist an-extenorc))])
-      (and (assq prop old-props)
+    (for/or ([prop (map car (extenorc-property-alist an-extenorc))])
+      (and (assq prop old-props-alist)
            prop)))
   (when prop-conflict
     (error 'add-extenorc "extenor already contains struct-type-property: ~v"
@@ -108,7 +116,7 @@
   ;; of all extenorcs.
   (define new-constructor
     (if (null? new-props-alist)
-        old-constructor
+        (extenor-struct-constructor an-extenor)
         (build-extenor-constructor (append new-props-alist old-props-alist))))
 
   ;; We need to add any new fields, applying guards as necessary.
@@ -138,7 +146,7 @@
   (new-constructor new-constructor new-table))
 
 (define (remove-extenorc an-extenor an-extenorc)
-  (define extenor-constructor (extenor-struct-type-constructor))
+  (define extenor-constructor (extenor-struct-constructor an-extenor))
   (define new-table (hash-remove (extenor-extenorc-table an-extenor) an-extenorc))
   (if (null? (extenorc-property-alist an-extenorc))
       (extenor-constructor
@@ -179,12 +187,12 @@
                               (if single-field?
                                   (guard-proc (list new-value-or-fallback))
                                   (guard-proc
-                                   (list-set contents index new-value-or-fallback)))]))
-                      (hash-set (extenor-extenorc-table an-extenor)
-                                extenorc
-                                (if single-field?
-                                    (car new-contents)
-                                    new-contents))
+                                   (list-set contents index new-value-or-fallback)))])
+                        (hash-set (extenor-extenorc-table an-extenor)
+                                  extenorc
+                                  (if single-field?
+                                      (car new-contents)
+                                      new-contents)))
                       (if single-field?
                           contents
                           (list-ref contents index)))
@@ -194,7 +202,7 @@
           (let ([new-table (hash-set (extenor-extenorc-table an-extenor)
                                      field-symbol
                                      new-value-or-fallback)]
-                [st-ctor (extenor-struct-type-constructor an-extenor)])
+                [st-ctor (extenor-struct-constructor an-extenor)])
             (st-ctor st-ctor new-table))
           (if (procedure? new-value-or-fallback)
               (new-value-or-fallback)
@@ -210,7 +218,7 @@
   (do-extenor-walk/break #f an-extenor field-symbol fallback))
 
 (define (set-extenor-field an-extenor field-symbol new-value)
-  (do-extenor-walk/break #t an-extenor field-symbol fallback))
+  (do-extenor-walk/break #t an-extenor field-symbol new-value))
 
 (define (get-extenor-keys an-extenor)
   (for/fold ([result '()])
@@ -263,7 +271,7 @@
          . field-name-spec)
   (define this-extenorc
     (extenorc name
-              field-spec-list
+              field-name-spec
               (for/list ([(key val) (in-hash properties)])
                 #;(when (not (struct-type-property? key))
                     (error 'make-extenorc "Not a struct-type-property: ~v" key))
