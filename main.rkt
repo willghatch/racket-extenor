@@ -7,13 +7,18 @@
  (contract-out
   [extenor? (-> any/c any/c)]
   [empty-extenor extenor?]
-  [add-extenorc (->* (extenor? extenorc?) () #:rest (listof any/c) extenor?)]
+  [add-extenorc (->* (extenor? (or/c extenorc? isym?))
+                     ()
+                     #:rest (listof any/c)
+                     extenor?)]
   [get-extenor-field (->* (extenor? isym?) (any/c) any/c)]
   [set-extenor-field (-> extenor? isym? any/c any/c)]
   [get-extenor-keys (-> extenor? (listof isym?))]
   [get-extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
   [remove-extenorc (-> extenor? extenorc? extenor?)]
   ; TODO - merge-extenors
+  ; TODO - remove-extenorc-with-key
+  ; TODO - remove-extenorc-with-property
 
   [make-extenorc (->* ()
                       (#:name (or/c not isym?)
@@ -25,10 +30,9 @@
                               (-> any/c any/c)
                               (listof (-> extenor? any/c))
                               (listof (-> extenor? any/c extenor?))))]
-  [extenorc? (-> any/c any/c)]
-  [extenorc-name (-> extenorc? any/c)]
-  [get-extenorc-struct-type-properties
-   (-> extenorc? (listof struct-type-property?))]
+  [rename extenorc?* extenorc? (-> any/c any/c)]
+  [rename extenorc-name* extenorc-name (-> extenorc? any/c)]
+  [get-extenorc-struct-type-properties (-> extenorc? (listof struct-type-property?))]
   [make-prop-extenorc (-> struct-type-property? any/c extenorc?)]
   )
  define-extenorc
@@ -67,6 +71,25 @@
 ;;   can transform the data for construction.
 (struct extenorc (name field-spec-list property-alist guard))
 
+(define (extenorc?* ec)
+  (or (symbol? ec) (extenorc? ec)))
+(define (extenorc-name* ec)
+  (if (symbol? ec)
+      ec
+      (extenorc-name ec)))
+(define (extenorc-field-spec-list* ec)
+  (if (symbol? ec)
+      (list (cons 'visible ec))
+      (extenorc-field-spec-list ec)))
+(define (extenorc-property-alist* ec)
+  (if (symbol? ec)
+      '()
+      (extenorc-property-alist ec)))
+(define (extenorc-guard* ec)
+  (if (symbol? ec)
+      #f
+      (extenorc-guard ec)))
+
 (define empty-extenor (extenor extenor (hasheq)))
 
 (define (build-extenor-constructor prop-alist)
@@ -80,7 +103,9 @@
     (error 'add-extenorc "the extenor already contains the extenorc: ~v" an-extenorc))
   ;; Check whether any visible fields of the extenorc conflict with existing
   ;; visible fields in the extenor.
-  (define field-specs (extenorc-field-spec-list an-extenorc))
+  (define field-specs (if (symbol? an-extenorc)
+                          (list (cons 'visible an-extenorc))
+                          (extenorc-field-spec-list an-extenorc)))
   (define field-conflict
     (for/or ([field-spec field-specs])
       (and (eq? (car field-spec) 'visible)
@@ -94,18 +119,16 @@
            field-conflict))
   ;; Check whether any properties of the extenorc conflict with existing properties
   ;; on the extenor.
-  (define new-props-alist (extenorc-property-alist an-extenorc))
+  (define new-props-alist (extenorc-property-alist* an-extenorc))
   (define old-props-alist
     (and (not (null? new-props-alist))
          (for/fold ([props '()])
                    ([extenorc (hash-keys
                                (extenor-extenorc-table an-extenor))])
-           (append (if (symbol? extenorc)
-                       '()
-                       (extenorc-property-alist extenorc))
+           (append (extenorc-property-alist* extenorc)
                    props))))
   (define prop-conflict
-    (for/or ([prop (map car (extenorc-property-alist an-extenorc))])
+    (for/or ([prop (map car new-props-alist)])
       (and (assq prop old-props-alist)
            prop)))
   (when prop-conflict
@@ -128,14 +151,14 @@
            field-specs-l
            field-vals-l))
   (define guarded-field-vals
-    (if (extenorc-guard extenorc)
-        (apply extenorc-guard field-vals)
+    (if (extenorc-guard* an-extenorc)
+        (apply (extenorc-guard* an-extenorc) field-vals)
         field-vals))
   (when (and (not (eq? field-vals guarded-field-vals))
              (not (eq? field-vals-l (length guarded-field-vals))))
     (error 'add-extenorc
            "Guard procedure returned the wrong number of fields for extenorc: ~v"
-           (extenorc-name an-extenorc)))
+           (extenorc-name* an-extenorc)))
   (define new-contents
     (cond [(eq? 0 field-vals-l) '()]
           [(eq? 1 field-vals-l) (car guarded-field-vals)]
@@ -148,7 +171,7 @@
 (define (remove-extenorc an-extenor an-extenorc)
   (define extenor-constructor (extenor-struct-constructor an-extenor))
   (define new-table (hash-remove (extenor-extenorc-table an-extenor) an-extenorc))
-  (if (null? (extenorc-property-alist an-extenorc))
+  (if (null? (extenorc-property-alist* an-extenorc))
       (extenor-constructor
        extenor-constructor
        (hash-remove (extenor-extenorc-table an-extenor) an-extenorc))
@@ -156,7 +179,7 @@
                                    ([extenorc (hash-keys new-table)])
                            (if (symbol? extenorc)
                                props
-                               (append (extenorc-property-alist extenorc)
+                               (append (extenorc-property-alist* extenorc)
                                        props)))]
              [new-constructor (build-extenor-constructor prop-alist)])
         (new-constructor new-constructor new-table))))
@@ -172,7 +195,7 @@
               (hash-set (extenor-extenorc-table an-extenor)
                         extenorc new-value-or-fallback)
               contents)
-          (let* ([fields (extenorc-field-spec-list extenorc)]
+          (let* ([fields (extenorc-field-spec-list* extenorc)]
                  [single-field? (list-length-one? fields)])
             (for/fold ([result result])
                       ([field-spec fields]
@@ -181,7 +204,7 @@
               (if (and (eq? (car field-spec) 'visible)
                        (eq? (cdr field-spec) field-symbol))
                   (if set?
-                      (let* ([guard-proc (or (extenorc-guard extenorc)
+                      (let* ([guard-proc (or (extenorc-guard* extenorc)
                                              (λ(x)x))]
                              [new-contents
                               (if single-field?
@@ -225,16 +248,16 @@
             ([extenorc (hash-keys (extenor-extenorc-table an-extenor))])
     (append (filter-map (λ (fs) (and (eq? 'visible (car fs))
                                      (cdr fs)))
-                        (extenorc-field-spec-list extenorc))
+                        (extenorc-field-spec-list* extenorc))
             result)))
 
 (define (get-extenor-struct-type-properties an-extenor)
   (for/fold ([result '()])
             ([extenorc (hash-keys (extenor-extenorc-table an-extenor))])
-    (append (map car (extenorc-property-alist extenorc)) result)))
+    (append (map car (extenorc-property-alist* extenorc)) result)))
 
 (define (get-extenorc-struct-type-properties an-extenorc)
-  (map car (extenorc-property-alist an-extenorc)))
+  (map car (extenorc-property-alist* an-extenorc)))
 
 (define-syntax (define-extenorc stx)
   (define-syntax-class field-spec
@@ -259,10 +282,11 @@
                      (make-extenorc #:name 'name
                                     #:guard guard-expression
                                     #:properties (make-immutable-hash
-                                                  (~@ (cons prop-expression
-                                                            prop-val-expression)
-                                                      ...))
-                                    (cons 'fs.visibility 'fs.field-name) ...))))))]))
+                                                  (list
+                                                   (~@ (cons prop-expression
+                                                             prop-val-expression)
+                                                       ...)))
+                                    (cons fs.visibility 'fs.field-name) ...))))))]))
 
 (define (make-extenorc
          #:name [name #f]
@@ -331,3 +355,29 @@
        (null? (cdr l))))
 
 (define opaque-flag (gensym))
+
+(module+ test
+  (require rackunit)
+
+  (define-extenorc point (x y [hidden relevant?]))
+  (define-extenorc proc-return-keys ()
+    #:property prop:procedure (λ (self) (get-extenor-keys self)))
+
+  (define my-point
+    (add-extenorc
+     (add-extenorc
+      (add-extenorc empty-extenor
+                    point
+                    1 2 #t)
+      proc-return-keys)
+     'z 5))
+
+  (check-equal? (get-extenor-field my-point 'x) 1)
+  (check-equal? (point-x my-point) 1)
+  (check-equal? (get-extenor-field my-point 'y) 2)
+  (check-equal? (point-y my-point) 2)
+  (check-equal? (get-extenor-field my-point 'z) 5)
+  (check-exn exn? (λ () (get-extenor-field my-point 'relevant?)))
+  (check-equal? (point-relevant? my-point) #t)
+  (check-equal? (length (my-point)) 3)
+  )
