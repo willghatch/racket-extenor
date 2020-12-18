@@ -7,7 +7,7 @@
  (contract-out
   [extenor? (-> any/c any/c)]
   [empty-extenor extenor?]
-  [extenor-extend (->* (extenor? (or/c extenorcl? isym?))
+  [extenor-extend (->* (extenor? extenorcl?*)
                        ()
                        #:rest (listof any/c)
                        extenor?)]
@@ -15,7 +15,7 @@
   [extenor-set (-> extenor? isym? any/c any/c)]
   [extenor-names (-> extenor? (listof isym?))]
   [extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
-  [extenor-remove-extenorcl (-> extenor? extenorcl? extenor?)]
+  [extenor-remove-extenorcl (-> extenor? extenorcl?* extenor?)]
   ; TODO - extenor-merge
   ; TODO - extenor-remove-extenorcl-with-name
   ; TODO - extenor-remove-extenorcl-with-property
@@ -32,9 +32,9 @@
                                (listof (-> extenor? any/c extenor?))))]
   [rename extenorcl?* extenorcl? (-> any/c any/c)]
   ; TODO - I think I want to remove this one.
-  [rename extenorcl-name* extenorcl-name (-> extenorcl? any/c)]
+  [rename extenorcl-name* extenorcl-name (-> extenorcl?* any/c)]
   ; TODO - extenorc-names
-  [extenorcl-struct-type-properties (-> extenorcl? (listof struct-type-property?))]
+  [extenorcl-struct-type-properties (-> extenorcl?* (listof struct-type-property?))]
   ; TODO - extenorcl-names
   [make-prop-extenorcl (-> struct-type-property? any/c extenorcl?)]
   )
