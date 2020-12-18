@@ -1,8 +1,8 @@
 #lang racket/base
 
 (provide
- prop:custom-write-extenorc
- basic-prop:dict-extenorc
+ prop:custom-write-extenorcl
+ basic-prop:dict-extenorcl
  )
 
 (require
@@ -13,8 +13,8 @@
  racket/dict
  )
 
-(define prop:custom-write-extenorc
-  (make-prop-extenorc
+(define prop:custom-write-extenorcl
+  (make-prop-extenorcl
    prop:custom-write
    (λ (self port mode)
      ;; mode is #t for write, #f for display, 0 or 1 as the quoting depth for print
@@ -24,31 +24,31 @@
                                 keys)
                            ", ")))))
 
-#;(define hasheq-extenorc
-  (make-prop-extenorc
-   prop:dict
-   (vector-immutable
-    dict-ref
-    #f ;dict-set!
-    dict-set
-    #f ;dict-remove!
-    dict-remove
-    dict-count
-    ;; dict-iterate-first returns some kind of index to the first thing in the hash
-    dict-iterate-first
-    ;; dict-iterate-next takes a previous index (eg from dict-iterate-next or dict-iterate-first) and returns the next one, hopefully quickly, until there are no more, at which point it returns #f.
-    dict-iterate-next
-    ;; dict-iterate-key returns the key at a given iteration point
-    dict-iterate-key
-    ;; dict-iterate-value returns the value at a given iteration point
-    dict-iterate-value)))
+#;(define hasheq-extenorcl
+    (make-prop-extenorcl
+     prop:dict
+     (vector-immutable
+      dict-ref
+      #f ;dict-set!
+      dict-set
+      #f ;dict-remove!
+      dict-remove
+      dict-count
+      ;; dict-iterate-first returns some kind of index to the first thing in the hash
+      dict-iterate-first
+      ;; dict-iterate-next takes a previous index (eg from dict-iterate-next or dict-iterate-first) and returns the next one, hopefully quickly, until there are no more, at which point it returns #f.
+      dict-iterate-next
+      ;; dict-iterate-key returns the key at a given iteration point
+      dict-iterate-key
+      ;; dict-iterate-value returns the value at a given iteration point
+      dict-iterate-value)))
 
 (define (extenor-basic-dict-count extenor)
   (for/fold ([result 0])
-            ([extenorc (in-hash-keys (extenor-extenorc-table extenor))])
+            ([extenorcl (in-hash-keys (extenor-extenorcl-table extenor))])
     (+ result
        (length (filter (λ (x) (eq? (car x 'visible)))
-                       (extenorc-field-spec-list* extenorc))))))
+                       (extenorcl-field-spec-list* extenorcl))))))
 
 (define (extenor-basic-dict-iterate/generic extenor previous-iter)
   (define-values (previous-index previous-jndex)
@@ -57,13 +57,13 @@
        (values (car previous-iter) (cdr previous-iter))]
       [#f (values #f #f)]))
   (for/fold ([result #f])
-            ([extenorc (in-hash-keys (extenor-extenorc-table extenor))]
+            ([extenorcl (in-hash-keys (extenor-extenorcl-table extenor))]
              [index (in-naturals)]
              #:unless (and previous-index (<= index previous-index)))
     #:break result
-    (and (not (symbol? extenorc))
+    (and (not (symbol? extenorcl))
          (for/fold ([result result])
-                   ([field-spec (extenorc-field-spec-list* extenorc)]
+                   ([field-spec (extenorcl-field-spec-list* extenorcl)]
                     [jndex (in-naturals)]
                     #:unless (and previous-jndex (<= jndex previous-jndex)))
            #:break result
@@ -84,12 +84,12 @@
     (match iteration-key
       [(cons (and a (? exact-integer?)) (and b (? exact-integer?)))
        (for/fold ([result opaque-flag])
-                 ([extenorc (in-hash-keys (extenor-extenorc-table extenor))]
+                 ([extenorcl (in-hash-keys (extenor-extenorcl-table extenor))]
                   [index (in-naturals)]
                   #:when (equal? index a))
          #:break (not (eq? result opaque-flag))
          (for/fold ([result result])
-                   ([field-spec (extenorc-field-spec-list* extenorc)]
+                   ([field-spec (extenorcl-field-spec-list* extenorcl)]
                     [jndex (in-naturals)]
                     #:when (equal? jndex b))
            #:break (not (eq? result opaque-flag))
@@ -105,18 +105,18 @@
     (match iteration-key
       [(cons (and a (? exact-integer?)) (and b (? exact-integer?)))
        (for/fold ([result opaque-flag])
-                 ([extenorc (in-hash-keys (extenor-extenorc-table extenor))]
+                 ([extenorcl (in-hash-keys (extenor-extenorcl-table extenor))]
                   [index (in-naturals)]
                   #:when (equal? index a))
          #:break (not (eq? result opaque-flag))
-         (define contents (hash-ref (extenor-extenorc-table extenor) extenorc))
-         (if (and (single-field-extenorc? extenorc) (eq? index 0))
-             (and (eq? (car (extenorc-field-spec-list* extenorc))
+         (define contents (hash-ref (extenor-extenorcl-table extenor) extenorcl))
+         (if (and (single-field-extenorcl? extenorcl) (eq? index 0))
+             (and (eq? (car (extenorcl-field-spec-list* extenorcl))
                        'visible)
                   contents)
              (for/fold ([result result])
                        ([field-val contents]
-                        [field-spec (extenorc-field-spec-list* extenorc)]
+                        [field-spec (extenorcl-field-spec-list* extenorcl)]
                         [jndex (in-naturals)]
                         #:when (equal? jndex b))
                #:break (not (eq? result opaque-flag))
@@ -130,8 +130,8 @@
 (define (extenor-basic-dict-remove extenor key)
   (error 'extenor-dict-remove "TODO - implement dict-remove for extenors"))
 
-(define basic-prop:dict-extenorc
-  (make-prop-extenorc
+(define basic-prop:dict-extenorcl
+  (make-prop-extenorcl
    prop:dict
    (vector-immutable
     get-extenor-field
@@ -149,21 +149,21 @@
 (module+ test
   (require rackunit)
 
-  (define-extenorc point (x y [hidden relevant?]))
-  (define-extenorc proc-return-keys ()
+  (define-extenorcl point (x y [hidden relevant?]))
+  (define-extenorcl proc-return-keys ()
     #:property prop:procedure (λ (self) (get-extenor-keys self)))
 
   (define my-point
-    (add-extenorc
-     (add-extenorc
-      (add-extenorc empty-extenor
-                    point
-                    1 2 #t)
+    (add-extenorcl
+     (add-extenorcl
+      (add-extenorcl empty-extenor
+                     point
+                     1 2 #t)
       proc-return-keys)
      'z 5))
 
   (define my-point-dict
-    (add-extenorc my-point basic-prop:dict-extenorc))
+    (add-extenorcl my-point basic-prop:dict-extenorcl))
 
   (check-equal? (dict-ref my-point-dict 'x) 1)
   (check-equal? (dict-ref my-point-dict 'z) 5)

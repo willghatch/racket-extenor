@@ -23,20 +23,20 @@ My hand-wavy vision is to have commands for use in Rash that you can pipe around
 
 An `extenor` is an “EXTEnsible NOminal Record”.
 Extenors are purely functional, but may contain mutable values in their fields (eg. a box).
-An extenor is made of various `extenorc`s (Components).
-An extenorc is like a struct-type -- it has named fields, properties, and optionally a “guard” that interposes on construction and update.
-An extenor is essentially an instantiation of a combination of extenorcs, IE extenorcs are the (first-class) types and extenors are instances of (some mix of) those types.
-For now, at least, you can't make subtypes of extenorcs, but extenors form a subtype lattice according to which extenorcs they include (When I say “subtype” here, of course, I mean what one means when discussing types for a dynamically/un(i)typed language.  For the moment I am not delving into the static typing of these purposely very dynamic objects I want to use in my shell.  But I note that they have some relation to row types.  Though in principle I'm interested in a statically typed Rash-like shell, or adding gradual typing to Rash.  Though it's not my immediate priority.  What does it say about myself and/or the state of PL discourse that I feel the need to proactively explain my usage of the word “type” and this little project's relationship to the broader PL research world?).
-When defining extenorcs, you get predicate, accessor, and mutator functions which apply to extenors.
-When (functional) updates occur, all the fields and properties of all the extenorcs in the extenor are copied.
-When an extenorc with a guard is added to an extenor or has a field updated within an extenor, the guard is applied to the (new) fields relevant to that extenor.
-The guard has a chance to raise an error or replace those fields, but it can't interpose on the fields of other extenorcs.
-Extenors also act like a dictionary (though not conforming to Racket's `dict?` interface unless an attached extenorc provides that functionality via `prop:dict`, which may be done in various different ways).
-Extenorc fields may be visible or hidden.
-Visible fields are readable and (functionally) updatable via the dictionary interface, while hidden fields are only readable and updatable via the getter/setter functions provided at the time of extenorc construction.
-Extenorcs are in conflict if they share the same visible fields or struct type properties (or if they are the same extenorc according to `eq?`).
-Interned symbols are allowed as convenient, on-the-fly, single-field extenorcs.
-Symbol extenorcs rely on the dictionary interface, and don't supply accessor and mutator functions.
+An extenor is made of various `extenorcl`s (Components).
+An extenorcl is like a struct-type -- it has named fields, properties, and optionally a “guard” that interposes on construction and update.
+An extenor is essentially an instantiation of a combination of extenorcls, IE extenorcls are the (first-class) types and extenors are instances of (some mix of) those types.
+For now, at least, you can't make subtypes of extenorcls, but extenors form a subtype lattice according to which extenorcls they include (When I say “subtype” here, of course, I mean what one means when discussing types for a dynamically/un(i)typed language.  For the moment I am not delving into the static typing of these purposely very dynamic objects I want to use in my shell.  But I note that they have some relation to row types.  Though in principle I'm interested in a statically typed Rash-like shell, or adding gradual typing to Rash.  Though it's not my immediate priority.  What does it say about myself and/or the state of PL discourse that I feel the need to proactively explain my usage of the word “type” and this little project's relationship to the broader PL research world?).
+When defining extenorcls, you get predicate, accessor, and mutator functions which apply to extenors.
+When (functional) updates occur, all the fields and properties of all the extenorcls in the extenor are copied.
+When an extenorcl with a guard is added to an extenor or has a field updated within an extenor, the guard is applied to the (new) fields relevant to that extenor.
+The guard has a chance to raise an error or replace those fields, but it can't interpose on the fields of other extenorcls.
+Extenors also act like a dictionary (though not conforming to Racket's `dict?` interface unless an attached extenorcl provides that functionality via `prop:dict`, which may be done in various different ways).
+Extenorcl fields may be visible or hidden.
+Visible fields are readable and (functionally) updatable via the dictionary interface, while hidden fields are only readable and updatable via the getter/setter functions provided at the time of extenorcl construction.
+Extenorcls are in conflict if they share the same visible fields or struct type properties (or if they are the same extenorcl according to `eq?`).
+Interned symbols are allowed as convenient, on-the-fly, single-field extenorcls.
+Symbol extenorcls rely on the dictionary interface, and don't supply accessor and mutator functions.
 
 
 # TODO items:
@@ -58,7 +58,7 @@ Symbol extenorcs rely on the dictionary interface, and don't supply accessor and
 * I can happily use struct-type-properties with extenors, but not generics.  Generics only have static APIs (eg. you can add generic support to struct-types defined with the `struct` macro but not constructed dynamically `make-struct-type` procedure!), so I have no obvious way to support them.  But using generics instead of properties is what the documentation recommends!  I should either find a way to support generics via properties (because that's what they compile to) or look into adding dynamic APIs for dealing with generics to Racket.
 
 
-The major motivations for wanting to remove or shadow extenorcs and their fields are:
+The major motivations for wanting to remove or shadow extenorcls and their fields are:
 
 * Replacing a struct-type-property.  Eg. a function that constructs and returns extenors will be immediately more useful if it adds useful properties, such as `prop:custom-write`, `prop:dict`, etc.  But without a removal capability, this would block better or more task-appropriate versions of these properties from being used.  Also having these properties on by default would block merge operations on extenors that share a common property like `prop:custom-write`.
-* Overriding some field that's used in a duck-type way by functions related to one extenorc (IE an extenorc that assumes more about the structure of the host extenor than what is safe based on that extenorc alone) but is used in a conflicting way by another extenorc.  This is a bit of a mess, really, but I'm not immediately sure what to do about it in a principled way that doesn't drag me into having static types (and an advanced, fancy type system at that).  But I do want extenorcs to be easily mix-in-able, and it is tempting to have some capabilities packaged as extenorcs that require other dependencies to be injected by another party (hopefully with documented contracts).
+* Overriding some field that's used in a duck-type way by functions related to one extenorcl (IE an extenorcl that assumes more about the structure of the host extenor than what is safe based on that extenorcl alone) but is used in a conflicting way by another extenorcl.  This is a bit of a mess, really, but I'm not immediately sure what to do about it in a principled way that doesn't drag me into having static types (and an advanced, fancy type system at that).  But I do want extenorcls to be easily mix-in-able, and it is tempting to have some capabilities packaged as extenorcls that require other dependencies to be injected by another party (hopefully with documented contracts).
