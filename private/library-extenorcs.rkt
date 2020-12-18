@@ -18,9 +18,9 @@
    prop:custom-write
    (λ (self port mode)
      ;; mode is #t for write, #f for display, 0 or 1 as the quoting depth for print
-     (define keys (get-extenor-keys self))
+     (define keys (extenor-names self))
      (fprintf port "#extenor<~a>"
-              (string-join (map (λ (k) (format "~a:~v" k (get-extenor-field self k)))
+              (string-join (map (λ (k) (format "~a:~v" k (extenor-ref self k)))
                                 keys)
                            ", ")))))
 
@@ -134,9 +134,9 @@
   (make-prop-extenorcl
    prop:dict
    (vector-immutable
-    get-extenor-field
+    extenor-ref
     #f ;dict-set!
-    set-extenor-field
+    extenor-set
     #f ;dict-remove!
     extenor-basic-dict-remove
     extenor-basic-dict-count
@@ -151,19 +151,19 @@
 
   (define-extenorcl point (x y [hidden relevant?]))
   (define-extenorcl proc-return-keys ()
-    #:property prop:procedure (λ (self) (get-extenor-keys self)))
+    #:property prop:procedure (λ (self) (extenor-names self)))
 
   (define my-point
-    (add-extenorcl
-     (add-extenorcl
-      (add-extenorcl empty-extenor
-                     point
-                     1 2 #t)
+    (extenor-extend
+     (extenor-extend
+      (extenor-extend empty-extenor
+                      point
+                      1 2 #t)
       proc-return-keys)
      'z 5))
 
   (define my-point-dict
-    (add-extenorcl my-point basic-prop:dict-extenorcl))
+    (extenor-extend my-point basic-prop:dict-extenorcl))
 
   (check-equal? (dict-ref my-point-dict 'x) 1)
   (check-equal? (dict-ref my-point-dict 'z) 5)

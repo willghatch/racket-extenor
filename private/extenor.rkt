@@ -7,18 +7,18 @@
  (contract-out
   [extenor? (-> any/c any/c)]
   [empty-extenor extenor?]
-  [add-extenorcl (->* (extenor? (or/c extenorcl? isym?))
-                      ()
-                      #:rest (listof any/c)
-                      extenor?)]
-  [get-extenor-field (->* (extenor? isym?) (any/c) any/c)]
-  [set-extenor-field (-> extenor? isym? any/c any/c)]
-  [get-extenor-keys (-> extenor? (listof isym?))]
-  [get-extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
-  [remove-extenorcl (-> extenor? extenorcl? extenor?)]
-  ; TODO - merge-extenors
-  ; TODO - remove-extenorcl-with-key
-  ; TODO - remove-extenorcl-with-property
+  [extenor-extend (->* (extenor? (or/c extenorcl? isym?))
+                       ()
+                       #:rest (listof any/c)
+                       extenor?)]
+  [extenor-ref (->* (extenor? isym?) (any/c) any/c)]
+  [extenor-set (-> extenor? isym? any/c any/c)]
+  [extenor-names (-> extenor? (listof isym?))]
+  [extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
+  [extenor-remove-extenorcl (-> extenor? extenorcl? extenor?)]
+  ; TODO - extenor-merge
+  ; TODO - extenor-remove-extenorcl-with-name
+  ; TODO - extenor-remove-extenorcl-with-property
 
   [make-extenorcl (->* ()
                        (#:name (or/c not isym?)
@@ -31,8 +31,11 @@
                                (listof (-> extenor? any/c))
                                (listof (-> extenor? any/c extenor?))))]
   [rename extenorcl?* extenorcl? (-> any/c any/c)]
+  ; TODO - I think I want to remove this one.
   [rename extenorcl-name* extenorcl-name (-> extenorcl? any/c)]
-  [get-extenorcl-struct-type-properties (-> extenorcl? (listof struct-type-property?))]
+  ; TODO - extenorc-names
+  [extenorcl-struct-type-properties (-> extenorcl? (listof struct-type-property?))]
+  ; TODO - extenorcl-names
   [make-prop-extenorcl (-> struct-type-property? any/c extenorcl?)]
   )
  define-extenorcl
@@ -105,10 +108,10 @@
     (make-struct-type (gensym) struct:extenor 0 0 0 prop-alist))
   constructor)
 
-(define (add-extenorcl an-extenor an-extenorcl . field-vals)
+(define (extenor-extend an-extenor an-extenorcl . field-vals)
   ;; Check whether the extenorcl is already there.
   (when (hash-has-key? (extenor-extenorcl-table an-extenor) an-extenorcl)
-    (error 'add-extenorcl "the extenor already contains the extenorcl: ~v" an-extenorcl))
+    (error 'extenor-extend "the extenor already contains the extenorcl: ~v" an-extenorcl))
   ;; Check whether any visible fields of the extenorcl conflict with existing
   ;; visible fields in the extenor.
   (define field-specs (if (symbol? an-extenorcl)
@@ -118,12 +121,12 @@
     (for/or ([field-spec field-specs])
       (and (eq? (car field-spec) 'visible)
            (not (eq? opaque-flag
-                     (get-extenor-field an-extenor
-                                        (cdr field-spec)
-                                        opaque-flag)))
+                     (extenor-ref an-extenor
+                                  (cdr field-spec)
+                                  opaque-flag)))
            (cdr field-spec))))
   (when field-conflict
-    (error 'add-extenorcl "extenor already contains visible field: ~v"
+    (error 'extenor-extend "extenor already contains visible field: ~v"
            field-conflict))
   ;; Check whether any properties of the extenorcl conflict with existing properties
   ;; on the extenor.
@@ -140,7 +143,7 @@
       (and (assq prop old-props-alist)
            prop)))
   (when prop-conflict
-    (error 'add-extenorcl "extenor already contains struct-type-property: ~v"
+    (error 'extenor-extend "extenor already contains struct-type-property: ~v"
            prop-conflict))
   ;; If there are new properties, we need to make a new struct-type
   ;; that is a subtype of extenor that has all struct-type-properties
@@ -155,7 +158,7 @@
   (define field-specs-l (length field-specs))
   (when (not (eq? field-vals-l
                   field-specs-l))
-    (error 'add-extenorcl "Improper number of field values.  Expected ~a, received ~a"
+    (error 'extenor-extend "Improper number of field values.  Expected ~a, received ~a"
            field-specs-l
            field-vals-l))
   (define guarded-field-vals
@@ -164,7 +167,7 @@
         field-vals))
   (when (and (not (eq? field-vals guarded-field-vals))
              (not (eq? field-vals-l (length guarded-field-vals))))
-    (error 'add-extenorcl
+    (error 'extenor-extend
            "Guard procedure returned the wrong number of fields for extenorcl: ~v"
            (extenorcl-name* an-extenorcl)))
   (define new-contents
@@ -176,7 +179,7 @@
                               new-contents))
   (new-constructor new-constructor new-table))
 
-(define (remove-extenorcl an-extenor an-extenorcl)
+(define (extenor-remove-extenorcl an-extenor an-extenorcl)
   (define extenor-constructor (extenor-struct-constructor an-extenor))
   (define new-table (hash-remove (extenor-extenorcl-table an-extenor) an-extenorcl))
   (if (null? (extenorcl-property-alist* an-extenorcl))
@@ -242,16 +245,16 @@
           (void)
           result-tentative)))
 
-(define (get-extenor-field an-extenor field-symbol
-                           [fallback (λ () (error 'get-extenor-field
-                                                  "No value found for key: ~v"
-                                                  field-symbol))])
+(define (extenor-ref an-extenor field-symbol
+                     [fallback (λ () (error 'extenor-ref
+                                            "No value found for key: ~v"
+                                            field-symbol))])
   (do-extenor-walk/break #f an-extenor field-symbol fallback))
 
-(define (set-extenor-field an-extenor field-symbol new-value)
+(define (extenor-set an-extenor field-symbol new-value)
   (do-extenor-walk/break #t an-extenor field-symbol new-value))
 
-(define (get-extenor-keys an-extenor)
+(define (extenor-names an-extenor)
   (for/fold ([result '()])
             ([extenorcl (hash-keys (extenor-extenorcl-table an-extenor))])
     (append (filter-map (λ (fs) (and (eq? 'visible (car fs))
@@ -259,12 +262,12 @@
                         (extenorcl-field-spec-list* extenorcl))
             result)))
 
-(define (get-extenor-struct-type-properties an-extenor)
+(define (extenor-struct-type-properties an-extenor)
   (for/fold ([result '()])
             ([extenorcl (hash-keys (extenor-extenorcl-table an-extenor))])
     (append (map car (extenorcl-property-alist* extenorcl)) result)))
 
-(define (get-extenorcl-struct-type-properties an-extenorcl)
+(define (extenorcl-struct-type-properties an-extenorcl)
   (map car (extenorcl-property-alist* an-extenorcl)))
 
 (define-syntax (define-extenorcl stx)
@@ -371,25 +374,25 @@
 
   (define-extenorcl point (x y [hidden relevant?]))
   (define-extenorcl proc-return-keys ()
-    #:property prop:procedure (λ (self) (get-extenor-keys self)))
+    #:property prop:procedure (λ (self) (extenor-names self)))
 
   (define my-point
-    (add-extenorcl
-     (add-extenorcl
-      (add-extenorcl empty-extenor
-                     point
-                     1 2 #t)
+    (extenor-extend
+     (extenor-extend
+      (extenor-extend empty-extenor
+                      point
+                      1 2 #t)
       proc-return-keys)
      'z 5))
 
-  (check-equal? (get-extenor-field my-point 'x) 1)
+  (check-equal? (extenor-ref my-point 'x) 1)
   (check-equal? (point-x my-point) 1)
-  (check-equal? (get-extenor-field my-point 'y) 2)
+  (check-equal? (extenor-ref my-point 'y) 2)
   (check-equal? (point-y my-point) 2)
-  (check-equal? (get-extenor-field my-point 'z) 5)
-  (check-exn exn? (λ () (get-extenor-field my-point 'relevant?)))
-  (check-equal? (get-extenor-field my-point 'not-there 'fallback) 'fallback)
-  (check-equal? (get-extenor-field my-point 'not-there (λ () 'fallback-2))
+  (check-equal? (extenor-ref my-point 'z) 5)
+  (check-exn exn? (λ () (extenor-ref my-point 'relevant?)))
+  (check-equal? (extenor-ref my-point 'not-there 'fallback) 'fallback)
+  (check-equal? (extenor-ref my-point 'not-there (λ () 'fallback-2))
                 'fallback-2)
   (check-equal? (point-relevant? my-point) #t)
   (check-equal? (length (my-point)) 3)
