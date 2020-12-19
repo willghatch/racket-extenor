@@ -215,10 +215,17 @@ Convenience function for making an extenorcl with no fields and a single struct-
 
 @subsection{Library Extenorcls}
 
-TODO - I want a library of useful extenorcls.  Probably mainly extenorcls that implement struct-type properties.
+@defmodule[extenor/extenorcl/custom-write-extenorcl]
+@defthing[prop:custom-write-extenorcl extenorcl?]{
+An extenorcl providing a prop:custom-write implementation that displays visible keys with their values.
+Useful for manually inspecting an extenorcl since by default they are opaque.
+}
 
-I have a couple written already, such as an extenorcl that provides an implementation of @racket[prop:dict] and an one providing an implementation of @racket[prop:custom-write].
-But they are not provided by any public modules yet.
+@defmodule[extenor/extenorcl/dict-extenorcl]
+@defthing[prop:dict-extenorcl extenorcl?]{
+An extenorcl providing a prop:dict implementation.
+It basically uses @racket[extenor-ref] and @racket[extenor-set], and as such only accepts interned symbols as keys.
+}
 
 
 @section[#:tag "stability"]{Stability}
