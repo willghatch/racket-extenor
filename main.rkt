@@ -20,6 +20,9 @@
   [extenor-remove-extenorcl-with-key (-> extenor? isym? extenor?)]
   [extenor-remove-extenorcl-with-struct-type-property
    (-> extenor? struct-type-property? extenor?)]
+  [extenor-simple-merge (->* (extenor? extenor?)
+                             (#:equality (or/c #t #f (-> any/c any/c any/c)))
+                             extenor?)]
   ; TODO - extenor-merge
 
   [make-extenorcl (->* ()
@@ -408,6 +411,88 @@
 
 (define opaque-flag (gensym))
 
+
+
+(define (extenor-simple-merge l r #:equality [equality equal?])
+  ;; If l and r have different extenorcls that claim the same field, raise an exception.
+  ;; If both extenors have the same field, and equality returns false, raise an exception.
+  ;; If both extenors have the same field, and equality returns true, use the value in r.
+  (define l-vis-keys (extenor-keys l))
+  (define l-vis-tab (extenor-visible-name-table l))
+  (define r-vis-keys (extenor-keys r))
+  (define r-vis-tab (extenor-visible-name-table r))
+  (define new-visible-table
+    (for/fold ([new-vis r-vis-tab])
+              ([lk l-vis-keys])
+      (define l-ref (t-ref l-vis-tab lk #f))
+      (define r-ref (t-ref r-vis-tab lk #f))
+      (cond [(not r-ref) (t-set new-vis lk l-ref)]
+            [(not (eq? (car l-ref) (car r-ref)))
+             (error 'extenor-simple-merge
+                    "extenors have differernt extenorcls providing field ~a"
+                    lk)]
+            [(or (not equality)
+                 (and (procedure? equality)
+                      (not (equality (cdr l-ref) (cdr r-ref)))))
+             (error 'extenor-simple-merge
+                    "extenors have conflicting values for field ~a: ~v and ~v"
+                    lk
+                    (cdr l-ref) (cdr r-ref))]
+            [else new-vis])))
+
+  (define l-hid-tab (extenor-hidden-name-table l))
+  (define r-hid-tab (extenor-hidden-name-table r))
+  (define new-hidden-table
+    (for/fold ([new-hid r-hid-tab])
+              ([lk (t-keys l-hid-tab)])
+      (define l-ref (t-ref l-hid-tab lk #f))
+      (define r-ref (t-ref r-hid-tab lk #f))
+      (cond [(not r-ref) (t-set new-hid lk l-ref)]
+            ;; Hidden field names can't conflict, so we have one less case than with visible fields..
+            [(or (not equality)
+                 (and (procedure? equality)
+                      (not (equality (cdr l-ref) (cdr r-ref)))))
+             (error 'extenor-simple-merge
+                    "extenors have conflicting values for hidden field ~a: ~v and ~v"
+                    lk
+                    (cdr l-ref) (cdr r-ref))]
+            [else new-hid])))
+
+  (define l-props (extenor-stp-alist l))
+  (define r-props (extenor-stp-alist r))
+  (define new-props-alist
+    (for/fold ([new-props r-props])
+              ([l-prop-pair l-props])
+      (define r-prop-pair (assq (car l-prop-pair) r-props))
+      (cond [(not r-prop-pair) (cons l-prop-pair new-props)]
+            [(or (not equality)
+                 (and (procedure? equality)
+                      (not (equality (cdr l-prop-pair) (cdr r-prop-pair)))))
+             (error 'extenor-simple-merge
+                    "extenors have conflicting values for struct-type-property ~v: ~v and ~v"
+                    (car l-prop-pair)
+                    (cdr l-prop-pair) (cdr r-prop-pair))]
+            ;; TODO - fail if properties come from different extenorcls.
+            ;;        Probably I should change the storage of properties to be like
+            ;;        the other fields, a table from prop to (cons extenorcl prop-val).
+            ;;        This makes things more uniform, and just make constructor
+            ;;        construction slightly more complicated.
+            [else new-props])))
+
+  (define ctor (if (eq? new-props-alist r-props)
+                   (extenor-struct-constructor r)
+                   (build-extenor-constructor new-props-alist)))
+
+  (ctor ctor
+        (for/fold ([extenorcl-table (extenor-extenorcl-table r)])
+                  ([cl (t-keys (extenor-extenorcl-table l))])
+          (t-set extenorcl-table cl #t))
+        new-visible-table
+        new-hidden-table
+        new-props-alist))
+
+
+
 (module+ test
   (require rackunit)
 
@@ -446,4 +531,34 @@
                           my-point prop:procedure))))
   (check-equal? (extenor-struct-type-properties my-point)
                 (list prop:procedure))
+
+  (define my-point-2 (extenor-extend empty-extenor point 3 4 #f))
+
+  ;; Same field value, but field comes from different extenorcls
+  (check-exn exn? (λ () (extenor-simple-merge my-point-2
+                                              (extenor-extend empty-extenor 'x 3))))
+  ;; No conflicting extenorcls, but unequal fields.
+  (check-exn exn? (λ () (extenor-simple-merge my-point my-point-2)))
+  ;; Successful merge on simple symbol extenorcl
+  (check-equal? (extenor-ref (extenor-simple-merge
+                              my-point
+                              (extenor-extend empty-extenor 'z 5))
+                             'z)
+                5)
+
+  ;; successful merge
+  (define my-point-merge-1 (extenor-simple-merge my-point my-point-2
+                                                 #:equality (λ (l r) #t)))
+  (define my-point-merge-2 (extenor-simple-merge my-point my-point-2
+                                                 #:equality #t))
+  (check-equal? (extenor-ref my-point-merge-1 'x)
+                3)
+  (check-equal? (extenor-ref my-point-merge-2 'x)
+                3)
+  (check-equal? (point-relevant? my-point-merge-1)
+                #f)
+  (check-equal? (point-relevant? my-point-merge-2)
+                #f)
+  (check-equal? (procedure? my-point-merge-1) #t)
+  (check-equal? (procedure? my-point-merge-2) #t)
   )

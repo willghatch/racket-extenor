@@ -102,6 +102,19 @@ Returns an extenor like @racket[the-extenor] but with the extenorcl that provide
 Note that this may remove multiple keys and/or struct-type-properties.
 }
 
+@defproc[(extenor-simple-merge [l extenor?] [r extenor?]
+                               [#:equality equality
+                                (or/c #t #f
+                                      (-> any/c any/c any/c))
+                                equal?])
+         extenor?]{
+Merges two extenors.
+If @racket[l] and @racket[r] contain different extenorcls that provide the same visible key or structure-type-property, @racket[extenor-simple-merge] will raise an exception.
+If @racket[l] and @racket[r] share any extenorcls, the values of the extenorcls will be compared with @racket[equality].
+If @racket[equality] returns a non-@racket[#f] value (or if equality is @racket[#t]), the value in @racket[r] is used and the value of @racket[l] is discarded.
+If @racket[equality] returns @racket[#f] (or if equality is @racket[#f]), an exception is raised.
+}
+
 @defproc[(extenorcl? [v any/c]) bool?]{
 Predicate -- is this an extenorcl?
 }
