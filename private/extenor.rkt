@@ -14,7 +14,9 @@
   [extenor-ref (->* (extenor? isym?) (any/c) any/c)]
   [extenor-set (-> extenor? isym? any/c any/c)]
   [extenor-names (-> extenor? (listof isym?))]
+  ; TODO - extenor-has-name?
   [extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
+  ; TODO - extenor-has-struct-type-property?
   [extenor-remove-extenorcl (-> extenor? extenorcl?* extenor?)]
   ; TODO - extenor-merge
   ; TODO - extenor-remove-extenorcl-with-name
@@ -31,18 +33,15 @@
                                (listof (-> extenor? any/c))
                                (listof (-> extenor? any/c extenor?))))]
   [rename extenorcl?* extenorcl? (-> any/c any/c)]
-  ; TODO - I think I want to remove this one.
-  [rename extenorcl-name* extenorcl-name (-> extenorcl?* any/c)]
-  ; TODO - extenorc-names
   [extenorcl-struct-type-properties (-> extenorcl?* (listof struct-type-property?))]
-  ; TODO - extenorcl-names
+  [rename extenorcl-names* extenorcl-names (-> extenorcl?* (listof symbol?))]
   [make-prop-extenorcl (-> struct-type-property? any/c extenorcl?)]
   )
  define-extenorcl
  ;; TODO - a basic extenor with some good properties -- eg. prop:custom-write
  )
 
-(module+ for-private
+#;(module+ for-private
   (provide
    extenor-extenorcl-table
    extenorcl-field-spec-list*
@@ -58,50 +57,71 @@
   racket/syntax
   ))
 
+;; I may want to change what kind of dictionary I'm using.
+;; I don't want extra cost for generics, so I'm just going to use my own names.
+(define t-ref hash-ref)
+(define t-set hash-set)
+(define t-empty (hasheq))
+(define t-keys hash-keys)
+(define t-has? hash-has-key?)
+(define t-remove hash-remove)
+
 ;; An extenor has:
 ;; * The struct-type constructor for its type (for quickly setting fields without
 ;;   defining a new struct-type with all the properties).
-;; * A hash table from extenorcl to the extenorcl's data.
-;;   -  If there is one field, the hash table value for the extenorcl is that field.
-;;   -  If there are multiple fields, the hash table holds a list of the fields.
-;; Extenors can be extended with more extenorcls.  If an extenorcl adds a new property,
-;; the extended extenor must use a new subtype of the base extenor struct that includes
-;; the property.  If the extenorcl does not add a new property, then the current struct
-;; constructor can be re-used.
-(struct extenor (struct-constructor extenorcl-table))
+;; * A set of extenorcls contained, as a table from extenorcl to #t.
+;; * A table of visible names (where each name is an interned symbol).
+;; * A table of hidden names (where each name is an uninterned symbol).
+;;   The values of both name tables are a pair of (cons extenorcl value),
+;;   so the extenorcrl that hosts the name is easy to access.
+;; * An alist of struct-type-properties (with their values as RHS).
+;;
+;; Extenors can be extended with more extenorcls. If an extenorcl adds
+;; a new property, the extended extenor must use a new subtype of the
+;; base extenor struct that includes the property. If the extenorcl does
+;; not add a new property, then the current struct constructor can be
+;; re-used.
+(struct extenor
+  (struct-constructor extenorcl-table visible-name-table hidden-name-table stp-alist)
+  #:transparent)
+(define empty-extenor (extenor extenor t-empty t-empty t-empty '()))
 
 ;; extenorcls have:
-;; * A name, which is an interned symbol or #f. (TODO - this may change)
-;; * A field spec list, where each field spec is (cons visibility field-name)
-;;   where visibility is either 'hidden or 'visible and field-name is an
-;;   interned symbol.
-;; * A property alist, mapping struct-type-properties to the relevant values.
+;; * name - a name for the extenorcl (may be #f or interned symbol)
+;; * names - a list of names where visibles are interned symbols and hiddens are uninterned symbols.
+;; * visibles - like names list but with only visibles.
+;; * property-alist - mapping struct-type-properties to their values.
 ;; * a guard, which is either #f or a function that accepts one argument for
 ;;   each field and returns a list of the same number of fields.  It can
 ;;   either raise an exception to block construction with bad data or it
 ;;   can transform the data for construction.
-(struct extenorcl (name field-spec-list property-alist guard))
+(struct extenorcl (name all-names visibles property-alist guard))
 
 (define (extenorcl?* ec)
-  (or (symbol? ec) (extenorcl? ec)))
+  (or (isym? ec) (extenorcl? ec)))
 (define (extenorcl-name* ec)
   (if (symbol? ec)
       ec
       (extenorcl-name ec)))
-(define (extenorcl-field-spec-list* ec)
+(define (extenorcl-names* ec)
   (if (symbol? ec)
-      (list (cons 'visible ec))
-      (extenorcl-field-spec-list ec)))
+      (list ec)
+      (extenorcl-visibles ec)))
+(define (extenorcl-all-names* ec)
+  (if (symbol? ec)
+      (list ec)
+      (extenorcl-all-names ec)))
 (define (extenorcl-property-alist* ec)
   (if (symbol? ec)
       '()
       (extenorcl-property-alist ec)))
+(define (extenorcl-struct-type-properties* ec)
+  (map car (extenorcl-property-alist* ec)))
 (define (extenorcl-guard* ec)
   (if (symbol? ec)
       #f
       (extenorcl-guard ec)))
 
-(define empty-extenor (extenor extenor (hasheq)))
 
 (define (build-extenor-constructor prop-alist)
   (define-values (type constructor predicate accessor mutator)
@@ -110,34 +130,22 @@
 
 (define (extenor-extend an-extenor an-extenorcl . field-vals)
   ;; Check whether the extenorcl is already there.
-  (when (hash-has-key? (extenor-extenorcl-table an-extenor) an-extenorcl)
+  (when (t-has? (extenor-extenorcl-table an-extenor) an-extenorcl)
     (error 'extenor-extend "the extenor already contains the extenorcl: ~v" an-extenorcl))
   ;; Check whether any visible fields of the extenorcl conflict with existing
   ;; visible fields in the extenor.
-  (define field-specs (if (symbol? an-extenorcl)
-                          (list (cons 'visible an-extenorcl))
-                          (extenorcl-field-spec-list an-extenorcl)))
+  (define new-visibles (extenorcl-names* an-extenorcl))
+  (define old-visibles-table (extenor-visible-name-table an-extenor))
   (define field-conflict
-    (for/or ([field-spec field-specs])
-      (and (eq? (car field-spec) 'visible)
-           (not (eq? opaque-flag
-                     (extenor-ref an-extenor
-                                  (cdr field-spec)
-                                  opaque-flag)))
-           (cdr field-spec))))
+    (for/or ([vis new-visibles])
+      (and (t-has? old-visibles-table vis) vis)))
   (when field-conflict
     (error 'extenor-extend "extenor already contains visible field: ~v"
            field-conflict))
   ;; Check whether any properties of the extenorcl conflict with existing properties
   ;; on the extenor.
   (define new-props-alist (extenorcl-property-alist* an-extenorcl))
-  (define old-props-alist
-    (and (not (null? new-props-alist))
-         (for/fold ([props '()])
-                   ([extenorcl (hash-keys
-                                (extenor-extenorcl-table an-extenor))])
-           (append (extenorcl-property-alist* extenorcl)
-                   props))))
+  (define old-props-alist (extenor-stp-alist an-extenor))
   (define prop-conflict
     (for/or ([prop (map car new-props-alist)])
       (and (assq prop old-props-alist)
@@ -148,14 +156,15 @@
   ;; If there are new properties, we need to make a new struct-type
   ;; that is a subtype of extenor that has all struct-type-properties
   ;; of all extenorcls.
+  (define joined-props-alist (append new-props-alist old-props-alist))
   (define new-constructor
     (if (null? new-props-alist)
         (extenor-struct-constructor an-extenor)
-        (build-extenor-constructor (append new-props-alist old-props-alist))))
+        (build-extenor-constructor joined-props-alist)))
 
   ;; We need to add any new fields, applying guards as necessary.
   (define field-vals-l (length field-vals))
-  (define field-specs-l (length field-specs))
+  (define field-specs-l (length (extenorcl-all-names* an-extenorcl)))
   (when (not (eq? field-vals-l
                   field-specs-l))
     (error 'extenor-extend "Improper number of field values.  Expected ~a, received ~a"
@@ -170,105 +179,138 @@
     (error 'extenor-extend
            "Guard procedure returned the wrong number of fields for extenorcl: ~v"
            (extenorcl-name* an-extenorcl)))
-  (define new-contents
-    (cond [(eq? 0 field-vals-l) '()]
-          [(eq? 1 field-vals-l) (car guarded-field-vals)]
-          [else guarded-field-vals]))
-  (define new-table (hash-set (extenor-extenorcl-table an-extenor)
-                              an-extenorcl
-                              new-contents))
-  (new-constructor new-constructor new-table))
+
+  (define-values (new-visible-table new-hidden-table)
+    (for/fold ([vistab (extenor-visible-name-table an-extenor)]
+               [hidtab (extenor-hidden-name-table an-extenor)])
+              ([n (extenorcl-all-names* an-extenorcl)]
+               [v guarded-field-vals])
+      (values
+       (if (symbol-interned? n)
+           (values (t-set vistab n (cons an-extenorcl v)) hidtab)
+           (values vistab (t-set hidtab n (cons an-extenorcl v)))))))
+  (new-constructor new-constructor
+                   (t-set (extenor-extenorcl-table an-extenor) an-extenorcl #t)
+                   new-visible-table
+                   new-hidden-table
+                   joined-props-alist))
+
+(define (extenor-names an-extenor)
+  (t-keys (extenor-visible-name-table an-extenor)))
 
 (define (extenor-remove-extenorcl an-extenor an-extenorcl)
   (define extenor-constructor (extenor-struct-constructor an-extenor))
-  (define new-table (hash-remove (extenor-extenorcl-table an-extenor) an-extenorcl))
-  (if (null? (extenorcl-property-alist* an-extenorcl))
-      (extenor-constructor
-       extenor-constructor
-       (hash-remove (extenor-extenorcl-table an-extenor) an-extenorcl))
-      (let* ([prop-alist (for/fold ([props '()])
-                                   ([extenorcl (hash-keys new-table)])
-                           (if (symbol? extenorcl)
-                               props
-                               (append (extenorcl-property-alist* extenorcl)
-                                       props)))]
-             [new-constructor (build-extenor-constructor prop-alist)])
-        (new-constructor new-constructor new-table))))
+  (define new-cl-table (t-remove (extenor-extenorcl-table an-extenor) an-extenorcl))
+  (define-values (new-visible-table new-hidden-table)
+    (for/fold ([vistab (extenor-visible-name-table an-extenor)]
+               [hidtab (extenor-hidden-name-table an-extenor)])
+              ([n (extenorcl-all-names* an-extenorcl)])
+      (if (symbol-interned? n)
+          (values (t-remove vistab n) hidtab)
+          (values vistab (t-remove hidtab n)))))
+  (define new-props-alist
+    (if (null? (extenorcl-property-alist* an-extenorcl))
+        (extenor-stp-alist an-extenor)
+        (for/fold ([props '()])
+                  ([extenorcl (t-keys new-cl-table)])
+          (if (symbol? extenorcl)
+              props
+              (append (extenorcl-property-alist* extenorcl)
+                      props)))))
+  (define new-constructor
+    (if (null? (extenorcl-property-alist* an-extenorcl))
+        extenor-constructor
+        (build-extenor-constructor new-props-alist)))
 
-
-(define (do-extenor-walk/break set? an-extenor field-symbol new-value-or-fallback)
-  (define result-tentative
-    (for/fold ([result opaque-flag])
-              ([(extenorcl contents) (in-hash (extenor-extenorcl-table an-extenor))])
-      #:break (not (eq? result opaque-flag))
-      (if (eq? field-symbol extenorcl)
-          (if set?
-              (hash-set (extenor-extenorcl-table an-extenor)
-                        extenorcl new-value-or-fallback)
-              contents)
-          (let* ([fields (extenorcl-field-spec-list* extenorcl)]
-                 [single-field? (list-length-one? fields)])
-            (for/fold ([result result])
-                      ([field-spec fields]
-                       [index (in-naturals)])
-              #:break (not (eq? result opaque-flag))
-              (if (and (eq? (car field-spec) 'visible)
-                       (eq? (cdr field-spec) field-symbol))
-                  (if set?
-                      (let* ([guard-proc (or (extenorcl-guard* extenorcl)
-                                             (λ(x)x))]
-                             [new-contents
-                              (if single-field?
-                                  (guard-proc (list new-value-or-fallback))
-                                  (guard-proc
-                                   (list-set contents index new-value-or-fallback)))])
-                        (hash-set (extenor-extenorcl-table an-extenor)
-                                  extenorcl
-                                  (if single-field?
-                                      (car new-contents)
-                                      new-contents)))
-                      (if single-field?
-                          contents
-                          (list-ref contents index)))
-                  result))))))
-  (if (eq? result-tentative opaque-flag)
-      (if set?
-          (let ([new-table (hash-set (extenor-extenorcl-table an-extenor)
-                                     field-symbol
-                                     new-value-or-fallback)]
-                [st-ctor (extenor-struct-constructor an-extenor)])
-            (st-ctor st-ctor new-table))
-          (if (procedure? new-value-or-fallback)
-              (new-value-or-fallback)
-              new-value-or-fallback))
-      (if set?
-          (void)
-          result-tentative)))
+  (new-constructor new-constructor
+                   new-cl-table
+                   new-visible-table
+                   new-hidden-table
+                   new-props-alist))
 
 (define (extenor-ref an-extenor field-symbol
                      [fallback (λ () (error 'extenor-ref
                                             "No value found for key: ~v"
                                             field-symbol))])
-  (do-extenor-walk/break #f an-extenor field-symbol fallback))
+  ;; name may be visible (interned) or hidden for internal use, but I'll export
+  ;; this function with a contract that only accepts visible names.
+  (define bare-result
+    (if (symbol-interned? field-symbol)
+        (t-ref (extenor-visible-name-table an-extenor) field-symbol #f)
+        (t-ref (extenor-hidden-name-table an-extenor) field-symbol #f)))
+  (if (not bare-result)
+      (if (procedure? fallback)
+          (fallback)
+          fallback)
+      (cdr bare-result)))
 
-(define (extenor-set an-extenor field-symbol new-value)
-  (do-extenor-walk/break #t an-extenor field-symbol new-value))
-
-(define (extenor-names an-extenor)
-  (for/fold ([result '()])
-            ([extenorcl (hash-keys (extenor-extenorcl-table an-extenor))])
-    (append (filter-map (λ (fs) (and (eq? 'visible (car fs))
-                                     (cdr fs)))
-                        (extenorcl-field-spec-list* extenorcl))
-            result)))
+(define (extenor-set an-extenor name new-value)
+  ;; name may be visible (interned) or hidden for internal use, but I'll export
+  ;; this function with a contract that only accepts visible names.
+  (define ctor (extenor-struct-constructor an-extenor))
+  (define vis (extenor-visible-name-table an-extenor))
+  (define hid (extenor-hidden-name-table an-extenor))
+  (define name-is-vis? (symbol-interned? name))
+  (define bare-ref
+    (if name-is-vis?
+        (t-ref vis name #f)
+        (t-ref hid name #f)))
+  (cond
+    [(not bare-ref)
+     ;; If the key is not there, we add a fresh symbol extenorc.
+;(struct-constructor extenorcl-table visible-name-table hidden-name-table stp-alist)
+     (ctor ctor
+           (t-set (extenor-extenorcl-table an-extenor) name #t)
+           (t-set vis name (cons name new-value))
+           (extenor-hidden-name-table an-extenor)
+           (extenor-stp-alist an-extenor))]
+    [(symbol? (car bare-ref))
+     ;; If it's a degenerate symbol extenorcl, we don't need to worry about guards.
+     (ctor ctor
+           (extenor-extenorcl-table an-extenor)
+           (t-set vis name (cons name new-value))
+           (extenor-hidden-name-table an-extenor)
+           (extenor-stp-alist an-extenor))]
+    [else
+     (define the-extenorcl (car bare-ref))
+     (define guard (extenorcl-guard the-extenorcl))
+     (if guard
+         (let* ([all-names (extenorcl-all-names* the-extenorcl)]
+                [new-val-list (for/list ([n all-names])
+                                (if (eq? n name)
+                                    new-value
+                                    (if (symbol-interned? n)
+                                        (cdr (t-ref vis n))
+                                        (cdr (t-ref hid n)))))]
+                [guarded-val-list (apply guard new-val-list)])
+           (define-values (new-vis new-hid)
+             (for/fold ([vis vis]
+                        [hid hid])
+                       ([n all-names]
+                        [v guarded-val-list])
+               (if (symbol-interned? n)
+                   (values (t-set vis n (cons the-extenorcl v)) hid)
+                   (values vis (t-set hid n (cons the-extenorcl v))))))
+           (ctor ctor
+                 (extenor-extenorcl-table an-extenor)
+                 new-vis
+                 new-hid
+                 (extenor-stp-alist an-extenor)))
+         (ctor ctor
+               (extenor-extenorcl-table an-extenor)
+               (if name-is-vis?
+                   (t-set vis name (cons the-extenorcl new-value))
+                   vis)
+               (if name-is-vis?
+                   hid
+                   (t-set hid name (cons the-extenorcl new-value)))
+               (extenor-stp-alist an-extenor)))]))
 
 (define (extenor-struct-type-properties an-extenor)
-  (for/fold ([result '()])
-            ([extenorcl (hash-keys (extenor-extenorcl-table an-extenor))])
-    (append (map car (extenorcl-property-alist* extenorcl)) result)))
-
+  (map car (extenor-stp-alist an-extenor)))
 (define (extenorcl-struct-type-properties an-extenorcl)
   (map car (extenorcl-property-alist* an-extenorcl)))
+
 
 (define-syntax (define-extenorcl stx)
   (define-syntax-class field-spec
@@ -299,14 +341,22 @@
                                                         ...)))
                                      (cons fs.visibility 'fs.field-name) ...))))))]))
 
+
 (define (make-extenorcl
          #:name [name #f]
          #:guard [guard #f]
          #:properties [properties (hash)]
          . field-name-spec)
+  (define all-names (map (λ (ns) (if (eq? 'hidden (car ns))
+                                     (string->uninterned-symbol
+                                      (symbol->string (cdr ns)))
+                                     (cdr ns)))
+                         field-name-spec))
+  (define visible-names (filter symbol-interned? all-names))
   (define this-extenorcl
     (extenorcl name
-               field-name-spec
+               all-names
+               visible-names
                (for/list ([(key val) (in-hash properties)])
                  #;(when (not (struct-type-property? key))
                      (error 'make-extenorcl "Not a struct-type-property: ~v" key))
@@ -315,43 +365,26 @@
   (define this-extenorcl-predicate
     (λ (an-extenor)
       (and (extenor? an-extenor)
-           (hash-has-key? (extenor-extenorcl-table an-extenor)
-                          this-extenorcl))))
-  (define single-field?
-    (list-length-one? field-name-spec))
+           (t-has? (extenor-extenorcl-table an-extenor)
+                   this-extenorcl))))
   (define this-extenorcl-getters
-    (for/list ([fns field-name-spec]
-               [index (in-naturals)])
+    (for/list ([n all-names])
       (λ (an-extenor)
-        (let ([contents
-               (hash-ref (extenor-extenorcl-table an-extenor)
-                         this-extenorcl
-                         (λ () (error 'extenorcl-getter
-                                      "extenorcl (~v) not found in extenor (~v)"
-                                      name
-                                      an-extenor)))])
-          (if single-field?
-              contents
-              (list-ref contents index))))))
+        (if (this-extenorcl-predicate an-extenor)
+            (extenor-ref an-extenor n)
+            (error 'extenorcl-getter
+                   "extenor (~v) is not an instance of extenorcl (~v)"
+                   an-extenor
+                   (or name this-extenorcl))))))
   (define this-extenorcl-setters
-    (for/list ([fns field-name-spec]
-               [index (in-naturals)])
+    (for/list ([n all-names])
       (λ (an-extenor new-val)
-        (when (not (this-extenorcl-predicate an-extenor))
-          (error 'extenorcl-setter
-                 "extenorcl (~v) not found in extenor (~v)"
-                 name
-                 an-extenor))
-        (if single-field?
-            (hash-set (extenor-extenorcl-table an-extenor)
-                      this-extenorcl
-                      new-val)
-            (let ([contents
-                   (hash-ref (extenor-extenorcl-table an-extenor)
-                             this-extenorcl)])
-              (hash-set (extenor-extenorcl-table an-extenor)
-                        this-extenorcl
-                        (list-set contents index new-val)))))))
+        (if (this-extenorcl-predicate an-extenor)
+            (extenor-set an-extenor n new-val)
+            (error 'extenorcl-setter
+                   "extenor (~v) is not an instance of extenorcl (~v)"
+                   an-extenor
+                   (or name this-extenorcl))))))
   (list
    this-extenorcl
    this-extenorcl-predicate
@@ -360,12 +393,6 @@
 
 (define (make-prop-extenorcl prop prop-val)
   (car (make-extenorcl #:properties (hash prop prop-val))))
-
-(define (list-length-one? l)
-  (and (not (null? l))
-       (null? (cdr l))))
-(define (single-field-extenorcl? ec)
-  (list-length-one? (extenorcl-field-spec-list* ec)))
 
 (define opaque-flag (gensym))
 
