@@ -403,7 +403,8 @@
    this-extenorcl-setters))
 
 (define (make-prop-extenorcl prop prop-val)
-  (car (make-extenorcl #:properties (hash prop prop-val))))
+  (car (make-extenorcl #:name (format "~a_prop-extenorcl" (object-name prop))
+                       #:properties (hash prop prop-val))))
 
 (define opaque-flag (gensym))
 
