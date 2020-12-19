@@ -215,12 +215,14 @@ Convenience function for making an extenorcl with no fields and a single struct-
 
 @subsection{Library Extenorcls}
 
+@subsection{prop:custom-write}
 @defmodule[extenor/extenorcl/custom-write-extenorcl]
 @defthing[prop:custom-write-extenorcl extenorcl?]{
 An extenorcl providing a prop:custom-write implementation that displays visible keys with their values.
 Useful for manually inspecting an extenorcl since by default they are opaque.
 }
 
+@subsection{prop:dict}
 @defmodule[extenor/extenorcl/dict-extenorcl]
 @defthing[prop:dict-extenorcl extenorcl?]{
 An extenorcl providing a prop:dict implementation.
