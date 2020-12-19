@@ -23,7 +23,7 @@ My hand-wavy vision is to have commands for use in Rash that you can pipe around
 
 An `extenor` is an “EXTEnsible NOminal Record”.
 Extenors are purely functional, but may contain mutable values in their fields (eg. a box).
-An extenor is made of various `extenorcl`s (Components).
+An extenor is made of various `extenorcl`s (class).
 An extenorcl is like a struct-type -- it has named fields, properties, and optionally a “guard” that interposes on construction and update.
 An extenor is essentially an instantiation of a combination of extenorcls, IE extenorcls are the (first-class) types and extenors are instances of (some mix of) those types.
 For now, at least, you can't make subtypes of extenorcls, but extenors form a subtype lattice according to which extenorcls they include (When I say “subtype” here, of course, I mean what one means when discussing types for a dynamically/un(i)typed language.  For the moment I am not delving into the static typing of these purposely very dynamic objects I want to use in my shell.  But I note that they have some relation to row types.  Though in principle I'm interested in a statically typed Rash-like shell, or adding gradual typing to Rash.  Though it's not my immediate priority.  What does it say about myself and/or the state of PL discourse that I feel the need to proactively explain my usage of the word “type” and this little project's relationship to the broader PL research world?).

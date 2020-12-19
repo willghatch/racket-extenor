@@ -14,7 +14,7 @@
 @section{Guide}
 
 The Extenor package is an experimental package providing a particular kind of extensible object.
-ExteNoR stands for “Extensible Nominal Record”, and an extenor can be an instance of multiple extenorcls, or “Extensible Nominal Record Components”.
+ExteNoR stands for “Extensible Nominal Record”, and an extenor can be an instance of multiple extenorcls, or “Extensible Nominal Record Class”.
 An extenorcl is somewhat like a struct-type or a class, in that it defines a set of fields that an instance must have, as well as struct-type-properties.
 Each extenorcl comes with a predicate that is true for extenors that are instances of that extenorcl, as well as setter and getter functions.
 Each extenor is immutable, and using a setter or extending an extenor with a new extenorcl are functional opetations that return a fresh extenor.
