@@ -4,7 +4,6 @@
 
 (require
  "../main.rkt"
- racket/string
  racket/match
  racket/dict
  )

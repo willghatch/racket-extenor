@@ -1,6 +1,6 @@
 #lang racket/base
 (provide prop:custom-write-extenorcl)
-(require "../main.rkt")
+(require "../main.rkt" racket/string)
 (define prop:custom-write-extenorcl
   (make-prop-extenorcl
    prop:custom-write
