@@ -82,8 +82,7 @@
 ;; not add a new property, then the current struct constructor can be
 ;; re-used.
 (struct extenor
-  (struct-constructor extenorcl-table visible-name-table hidden-name-table stp-alist)
-  #:transparent)
+  (struct-constructor extenorcl-table visible-name-table hidden-name-table stp-alist))
 (define empty-extenor (extenor extenor t-empty t-empty t-empty '()))
 
 ;; extenorcls have:
