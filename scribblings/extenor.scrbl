@@ -75,7 +75,7 @@ IE get a new extenor with the field value replaced.
 If the extenor previously had no visible field, this effectively adds a degenerate extenorcl providing that visible field.
 }
 
-@defproc[(extenor-names [an-extenor extenor?]) (listof symbol?)]{
+@defproc[(extenor-keys [an-extenor extenor?]) (listof symbol?)]{
 Returns a list of keys for visible extenor fields.
 }
 @defproc[(extenor-struct-type-properties [an-extenor extenor?])
@@ -87,6 +87,19 @@ Returns a list of struct-type-properties supported by the extenor.
 @defproc[(extenor-remove-extenorcl [the-extenor extenor?] [the-extenorcl extenorcl?])
          extenor?]{
 Returns an extenor like @racket[the-extenor] but with @racket[the-extenorcl] removed.
+}
+@defproc[(extenor-remove-extenorcl-with-key [the-extenor extenor?]
+                                            [key (and/c symbol? symbol-interned?)])
+         extenor?]{
+Returns an extenor like @racket[the-extenor] but with the extenorcl that provides @racket[key] removed.
+Note that this may remove multiple keys and/or struct-type-properties.
+}
+@defproc[(extenor-remove-extenorcl-with-struct-type-property
+          [the-extenor extenor?]
+          [stp struct-type-property?])
+         extenor?]{
+Returns an extenor like @racket[the-extenor] but with the extenorcl that provides @racket[stp] removed.
+Note that this may remove multiple keys and/or struct-type-properties.
 }
 
 @defproc[(extenorcl? [v any/c]) bool?]{
@@ -207,8 +220,6 @@ Convenience function for making an extenorcl with no fields and a single struct-
 
 @itemlist[
 @item{@tt{merge-extenors} -- this should have various options related to conflicts.  IE what equality predicate (if any) to decide whether a field/property is the same in both, when both extenors have field values that aren't equal should the merge raise an exception or should it prefer the field in one of the extenors, etc}
-@item{@tt{extenor-remove-extenorcl-with-field-name} -- remove the extenorcl that has the given field name}
-@item{@tt{extenor-remove-extenorcl-with-property} -- remove the extenorcl with the given struct-type-property}
 @item{what else?}
 ]
 

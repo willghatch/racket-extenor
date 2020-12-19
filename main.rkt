@@ -13,14 +13,14 @@
                        extenor?)]
   [extenor-ref (->* (extenor? isym?) (any/c) any/c)]
   [extenor-set (-> extenor? isym? any/c any/c)]
-  [extenor-names (-> extenor? (listof isym?))]
-  ; TODO - extenor-has-name?
+  [extenor-keys (-> extenor? (listof isym?))]
+  [extenor-has-key? (-> extenor? isym? any/c)]
   [extenor-struct-type-properties (-> extenor? (listof struct-type-property?))]
-  ; TODO - extenor-has-struct-type-property?
   [extenor-remove-extenorcl (-> extenor? extenorcl?* extenor?)]
+  [extenor-remove-extenorcl-with-key (-> extenor? isym? extenor?)]
+  [extenor-remove-extenorcl-with-struct-type-property
+   (-> extenor? struct-type-property? extenor?)]
   ; TODO - extenor-merge
-  ; TODO - extenor-remove-extenorcl-with-name
-  ; TODO - extenor-remove-extenorcl-with-property
 
   [make-extenorcl (->* ()
                        (#:name (or/c not isym?)
@@ -34,20 +34,12 @@
                                (listof (-> extenor? any/c extenor?))))]
   [rename extenorcl?* extenorcl? (-> any/c any/c)]
   [extenorcl-struct-type-properties (-> extenorcl?* (listof struct-type-property?))]
-  [rename extenorcl-names* extenorcl-names (-> extenorcl?* (listof symbol?))]
+  [rename extenorcl-names* extenorcl-keys (-> extenorcl?* (listof symbol?))]
   [make-prop-extenorcl (-> struct-type-property? any/c extenorcl?)]
   )
  define-extenorcl
- ;; TODO - a basic extenor with some good properties -- eg. prop:custom-write
  )
 
-#;(module+ for-private
-  (provide
-   extenor-extenorcl-table
-   extenorcl-field-spec-list*
-   opaque-flag
-   single-field-extenorcl?
-   ))
 
 (require
  racket/list
@@ -114,8 +106,6 @@
   (if (symbol? ec)
       '()
       (extenorcl-property-alist ec)))
-(define (extenorcl-struct-type-properties* ec)
-  (map car (extenorcl-property-alist* ec)))
 (define (extenorcl-guard* ec)
   (if (symbol? ec)
       #f
@@ -194,8 +184,10 @@
                    new-hidden-table
                    joined-props-alist))
 
-(define (extenor-names an-extenor)
+(define (extenor-keys an-extenor)
   (t-keys (extenor-visible-name-table an-extenor)))
+(define (extenor-has-key? an-extenor name)
+  (t-has? (extenor-visible-name-table an-extenor) name))
 
 (define (extenor-remove-extenorcl an-extenor an-extenorcl)
   (define extenor-constructor (extenor-struct-constructor an-extenor))
@@ -226,6 +218,26 @@
                    new-visible-table
                    new-hidden-table
                    new-props-alist))
+
+(define (extenor-remove-extenorcl-with-key an-extenor name)
+  (define ref (t-ref (extenor-visible-name-table an-extenor) name #f))
+  (when (not ref)
+    (error 'extenor-remove-extenorcl-with-name
+           "Key not found in extenor: ~v"
+           name))
+  (extenor-remove-extenorcl an-extenor (car ref)))
+
+(define (extenor-remove-extenorcl-with-struct-type-property an-extenor stp)
+  (define the-extenorcl
+    (for/or ([cl (t-keys (extenor-extenorcl-table an-extenor))])
+      (and (assq stp (extenorcl-property-alist* cl))
+           cl)))
+  (when (not the-extenorcl)
+    (error 'extenor-remove-extenorcl-with-structure-type-property
+           "structure-type-property not found in extenor: ~v"
+           stp))
+  (extenor-remove-extenorcl an-extenor the-extenorcl))
+
 
 (define (extenor-ref an-extenor field-symbol
                      [fallback (λ () (error 'extenor-ref
@@ -400,7 +412,7 @@
 
   (define-extenorcl point (x y [hidden relevant?]))
   (define-extenorcl proc-return-keys ()
-    #:property prop:procedure (λ (self) (extenor-names self)))
+    #:property prop:procedure (λ (self) (extenor-keys self)))
 
   (define my-point
     (extenor-extend

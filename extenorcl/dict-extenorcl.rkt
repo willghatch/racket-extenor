@@ -9,10 +9,10 @@
  )
 
 (define (extenor-basic-dict-count extenor)
-  (length (extenor-names extenor)))
+  (length (extenor-keys extenor)))
 
 (define (extenor-basic-dict-iterate-first extenor)
-  (define iter (extenor-names extenor))
+  (define iter (extenor-keys extenor))
   (if (null? iter) #f iter))
 
 (define (extenor-basic-dict-iterate-next extenor prev-iter)
@@ -53,7 +53,7 @@
 
   (define-extenorcl point (x y [hidden relevant?]))
   (define-extenorcl proc-return-keys ()
-    #:property prop:procedure (λ (self) (extenor-names self)))
+    #:property prop:procedure (λ (self) (extenor-keys self)))
 
   (define my-point
     (extenor-extend
