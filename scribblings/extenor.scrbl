@@ -3,6 +3,8 @@
 @author+email["William Hatch" "william@hatch.uno"]
 
 @(require
+  scribble/examples
+  racket/sandbox
   (for-label
    "../main.rkt"
    racket/base
@@ -32,16 +34,85 @@ Visible extenor fields are more duck-typable (or perhaps structurally-typable, m
 The main motivation here is that you might have various shell utility functions that you use in pipelines that operate on standard field names, and you may add fields dynamically in a pipeline to make data from some system administration function/command work with some other command.
 Thus extenors give you something that simultaneously has some of the properties of a dictionary and some of the properties of a nominal record, and in particular the capability to have struct-type-properties (and in fact different struct-type-properties on each instance).
 
+@(define my-evaluator
+   (parameterize ([sandbox-output 'string]
+                  [sandbox-error-output 'string])
+     (make-evaluator 'racket/base)))
 
-
-TODO - good walkthrough of examples.
+@(examples
+  #:eval my-evaluator
+  (require extenor)
+  (code:comment "Let's make some extenorcls, IE extenor classes.")
+  (define-extenorcl point ([hidden x] [hidden y]))
+  (define-extenorcl frog ([visible size] [visible name]))
+  (define point-frog-v1 (extenor-extend (extenor-extend empty-extenor point 5 7)
+                                           frog 10 "Jeremy"))
+  (code:comment "Without a custom write procedure, extenors don't print very well.")
+  (println point-frog-v1)
+  (require extenor/extenorcl/custom-write-extenorcl)
+  (define point-frog (extenor-extend point-frog-v1 prop:custom-write-extenorcl))
+  (code:comment "This custom write implementation makes it print visible fields.")
+  (println point-frog)
+  (code:comment "point-frog is both a point and a frog.")
+  (point? point-frog)
+  (frog? point-frog)
+  (code:comment "We can access the point information with struct-like accessors.")
+  (point-x point-frog)
+  (point-y point-frog)
+  (code:comment "We can access frog info that way too.")
+  (frog-size point-frog)
+  (code:comment "But we can also access visible names with extenor-ref.")
+  (extenor-ref point-frog 'size)
+  (code:comment "Hidden fields can't be accessed with extenor-ref or extenor-set.")
+  (eval:error (extenor-ref point-frog 'x))
+  (code:comment "We can also functionally update.")
+  (define bigger-frog (extenor-set point-frog 'size 100))
+  (println bigger-frog)
+  (define biggest-frog (set-frog-size point-frog 9000))
+  (println biggest-frog)
+  (code:comment "Interned symbols can be used as extenorcls.")
+  (define blue-frog (extenor-extend point-frog 'color "blue"))
+  (println blue-frog)
+  (code:comment "extenor-set with a name that's not in the extenor extends it")
+  (code:comment "like extenor-extend with a plain symbol.")
+  (define green-frog (extenor-set point-frog 'color "green"))
+  (println green-frog)
+  (code:comment "Because the fields of point are hidden, they don't conflict")
+  (code:comment "with other extenorcls that have (hidden or visible) fields named")
+  (code:comment "x or y.")
+  (code:comment "This example just causes confusion, but this can allow encapsulation")
+  (code:comment "of private fields without needing to craft names that nobody else")
+  (code:comment "will use.")
+  (define extra-x (extenor-set point-frog 'x 'x-value))
+  (println extra-x)
+  (extenor-ref extra-x 'x)
+  (point-x extra-x)
+  (code:comment "Extenors are dict-like.  Let's make a frog implement prop:dict.")
+  (require racket/dict)
+  (require extenor/extenorcl/dict-extenorcl)
+  (define dict-frog (extenor-extend green-frog prop:dict-extenorcl))
+  (dict-ref dict-frog 'size)
+  (code:comment "Actually, it's probably better to start with a more capable")
+  (code:comment "extenor than the raw empty-extenor.")
+  (define base-extenor
+    (extenor-extend (extenor-extend empty-extenor prop:custom-write-extenorcl)
+                    prop:dict-extenorcl))
+  (code:comment "Maybe we will get related extenors from multiple sources and")
+  (code:comment "want to join the data.")
+  (define a-point (extenor-extend base-extenor point 42 24))
+  (define a-frog (extenor-extend base-extenor frog 3 "Toad"))
+  (define yet-another-point-frog
+    (extenor-simple-merge a-point a-frog))
+  (point? yet-another-point-frog)
+  (frog? yet-another-point-frog)
+  (println yet-another-point-frog)
+  )
 
 
 @section{Reference}
 
 See @secref{stability}.
 
-TODO - add examples for each.
 
 @defproc[(extenor? [v any/c]) bool?]{
 Predicate - is this an extenor?
