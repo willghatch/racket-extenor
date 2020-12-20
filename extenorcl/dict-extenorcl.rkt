@@ -1,6 +1,6 @@
 #lang racket/base
 
-(provide basic-prop:dict-extenorcl)
+(provide (rename-out [basic-prop:dict-extenorcl prop:dict-extenorcl]))
 
 (require
  "../main.rkt"
