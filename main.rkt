@@ -338,21 +338,22 @@
          (~seq #:property prop-expression prop-val-expression))
         ...)
      (with-syntax ([(getter ...) (map (λ (fn) (format-id fn "~a-~a" #'name fn))
-                                      (syntax->list #'(fs.field-name ...)))])
-       (with-syntax ([(setter ...) (map (λ (fn) (format-id fn "set-~a-~a" #'name fn))
-                                        (syntax->list #'(fs.field-name ...)))])
-         #'(define-values
-             (name predicate getter ... setter ...)
-             (apply values
-                    (flatten
-                     (make-extenorcl #:name 'name
-                                     #:guard guard-expression
-                                     #:properties (make-immutable-hash
-                                                   (list
-                                                    (~@ (cons prop-expression
-                                                              prop-val-expression)
-                                                        ...)))
-                                     (cons fs.visibility 'fs.field-name) ...))))))]))
+                                      (syntax->list #'(fs.field-name ...)))]
+                   [(setter ...) (map (λ (fn) (format-id fn "set-~a-~a" #'name fn))
+                                      (syntax->list #'(fs.field-name ...)))]
+                   [predicate (format-id #'name "~a?" #'name)])
+       #'(define-values
+           (name predicate getter ... setter ...)
+           (apply values
+                  (flatten
+                   (make-extenorcl #:name 'name
+                                   #:guard guard-expression
+                                   #:properties (make-immutable-hash
+                                                 (list
+                                                  (~@ (cons prop-expression
+                                                            prop-val-expression)
+                                                      ...)))
+                                   (cons fs.visibility 'fs.field-name) ...)))))]))
 
 
 (define (make-extenorcl
