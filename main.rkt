@@ -177,10 +177,9 @@
                [hidtab (extenor-hidden-name-table an-extenor)])
               ([n (extenorcl-all-names* an-extenorcl)]
                [v guarded-field-vals])
-      (values
-       (if (symbol-interned? n)
-           (values (t-set vistab n (cons an-extenorcl v)) hidtab)
-           (values vistab (t-set hidtab n (cons an-extenorcl v)))))))
+      (if (symbol-interned? n)
+          (values (t-set vistab n (cons an-extenorcl v)) hidtab)
+          (values vistab (t-set hidtab n (cons an-extenorcl v))))))
   (new-constructor new-constructor
                    (t-set (extenor-extenorcl-table an-extenor) an-extenorcl #t)
                    new-visible-table
